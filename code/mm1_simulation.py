@@ -237,35 +237,45 @@ def run_multiple_simulations():
 
 def plot_results(results_df):
     """
-    Crée les graphiques de comparaison
+    Crée les graphiques de comparaison avec un espacement optimal
     """
-    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-    fig.suptitle('Simulation M/M/1: Comparaison Empirique vs Théorique', fontsize=16)
+    # Augmenter la taille de la figure et ajuster l'espacement
+    fig, axes = plt.subplots(2, 2, figsize=(16, 14))
+    
+    # Titre principal avec plus d'espace
+    fig.suptitle('Simulation M/M/1: Comparaison Empirique vs Théorique', 
+                 fontsize=12, y=1)
     
     # Graphique 1: Temps de réponse moyen
-    axes[0,0].plot(results_df['rho'], results_df['avg_response_time_emp'], 'bo-', label='Empirique', markersize=6)
-    axes[0,0].plot(results_df['rho'], results_df['avg_response_time_theo'], 'r--', label='Théorique', linewidth=2)
+    axes[0,0].plot(results_df['rho'], results_df['avg_response_time_emp'], 
+                   'bo-', label='Empirique', markersize=6)
+    axes[0,0].plot(results_df['rho'], results_df['avg_response_time_theo'], 
+                   'r--', label='Théorique', linewidth=2)
     axes[0,0].set_xlabel('Taux d\'occupation (ρ)')
     axes[0,0].set_ylabel('Temps de réponse moyen')
-    axes[0,0].set_title('Temps de réponse moyen')
+    axes[0,0].set_title('Temps de réponse moyen', pad=12)
     axes[0,0].legend()
     axes[0,0].grid(True, alpha=0.3)
     
     # Graphique 2: Temps d'attente moyen
-    axes[0,1].plot(results_df['rho'], results_df['avg_waiting_time_emp'], 'go-', label='Empirique', markersize=6)
-    axes[0,1].plot(results_df['rho'], results_df['avg_waiting_time_theo'], 'r--', label='Théorique', linewidth=2)
+    axes[0,1].plot(results_df['rho'], results_df['avg_waiting_time_emp'], 
+                   'go-', label='Empirique', markersize=6)
+    axes[0,1].plot(results_df['rho'], results_df['avg_waiting_time_theo'], 
+                   'r--', label='Théorique', linewidth=2)
     axes[0,1].set_xlabel('Taux d\'occupation (ρ)')
     axes[0,1].set_ylabel('Temps d\'attente moyen')
-    axes[0,1].set_title('Temps d\'attente moyen')
+    axes[0,1].set_title('Temps d\'attente moyen', pad=12)
     axes[0,1].legend()
     axes[0,1].grid(True, alpha=0.3)
     
     # Graphique 3: Taux d'occupation du serveur
-    axes[1,0].plot(results_df['rho'], results_df['server_utilization_emp'], 'mo-', label='Empirique', markersize=6)
-    axes[1,0].plot(results_df['rho'], results_df['server_utilization_theo'], 'r--', label='Théorique', linewidth=2)
+    axes[1,0].plot(results_df['rho'], results_df['server_utilization_emp'], 
+                   'mo-', label='Empirique', markersize=6)
+    axes[1,0].plot(results_df['rho'], results_df['server_utilization_theo'], 
+                   'r--', label='Théorique', linewidth=2)
     axes[1,0].set_xlabel('Taux d\'occupation théorique (ρ)')
     axes[1,0].set_ylabel('Taux d\'occupation mesuré')
-    axes[1,0].set_title('Taux d\'occupation du serveur')
+    axes[1,0].set_title('Taux d\'occupation du serveur', pad=12)
     axes[1,0].legend()
     axes[1,0].grid(True, alpha=0.3)
     
@@ -277,13 +287,21 @@ def plot_results(results_df):
     axes[1,1].plot(results_df['rho'], waiting_error, 'go-', label='Temps d\'attente', markersize=6)
     axes[1,1].set_xlabel('Taux d\'occupation (ρ)')
     axes[1,1].set_ylabel('Erreur relative (%)')
-    axes[1,1].set_title('Erreur relative (Empirique vs Théorique)')
+    axes[1,1].set_title('Erreur relative (Empirique vs Théorique)', pad=12)
     axes[1,1].legend()
     axes[1,1].grid(True, alpha=0.3)
     
-    plt.tight_layout()
-    plt.show()
+    # Ajustement de l'espacement entre les sous-graphiques
+    plt.subplots_adjust(
+        left=0.08,      # Marge gauche
+        bottom=0.08,    # Marge bas
+        right=0.95,     # Marge droite
+        top=0.90,       # Marge haut (laisse de la place pour le titre principal)
+        wspace=0.30,    # Espacement horizontal entre les graphiques
+        hspace=0.35     # Espacement vertical entre les graphiques
+    )
     
+    plt.show()
     return fig
 
 # Exemple d'utilisation

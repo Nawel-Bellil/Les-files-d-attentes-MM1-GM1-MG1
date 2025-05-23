@@ -41,7 +41,7 @@ class MM1Simulator:
         """Génère un temps de service selon loi exponentielle"""
         return np.random.exponential(1.0 / self.mu_rate)
     
-    def simulate(self, warmup_customers=10000, collect_stats_interval=1000):
+    def simulate(self, warmup_customers=20000, collect_stats_interval=1000):
         """
         Simule la file d'attente M/M/1
         
@@ -209,10 +209,10 @@ def run_multiple_simulations():
         print(f"\nSimulation {i+1}/{len(lambda_values)}: λ={lam:.1f}")
         
         # Créer et lancer la simulation
-        simulator = MM1Simulator(lam, mu, max_customers=100000)  # Réduit pour les tests
+        simulator = MM1Simulator(lam, mu, max_customers=1000000)  # Réduit pour les tests
         
         start_time = time.time()
-        simulator.simulate(warmup_customers=10000)
+        simulator.simulate(warmup_customers=20000)
         end_time = time.time()
         
         simulator.print_results()
@@ -327,3 +327,6 @@ if __name__ == "__main__":
     # Sauvegarde des résultats
     results_df.to_csv('mm1_simulation_results.csv', index=False)
     print("\nRésultats sauvegardés dans 'mm1_simulation_results.csv'")
+
+    df = pd.read_csv("mm1_simulation_results.csv")
+    print(df.head())

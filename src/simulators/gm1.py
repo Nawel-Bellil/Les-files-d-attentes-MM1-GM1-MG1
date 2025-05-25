@@ -2,10 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-from scipy import stats
-import time
-from dataclasses import dataclass
-from typing import List, Tuple, Dict
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -64,8 +60,7 @@ class GM1UniformQueueSimulator:
     def simulate(self, lambda_param):        
         # récupère les valeurs théoriques pour comparaison
         theoretical = self.calculate_theoretical_values(lambda_param)
-        
-        customers = []
+    
         server_busy_until = 0.0  # instant où le serveur sera libre
         
         # variables pour les statistiques après la période de warmup
@@ -90,7 +85,7 @@ class GM1UniformQueueSimulator:
             arrival_time = arrival_times[i]
             
             # marque le début de l'analyse après le warmup
-            if customer_id == self.warmup_customers + 1 and analysis_start_time is None:
+            if customer_id == self.warmup_customers + 1 :
                 analysis_start_time = arrival_time
             
             # détermine quand le service commence
@@ -129,7 +124,6 @@ class GM1UniformQueueSimulator:
         last_event_time = analysis_start_time
         analysis_end_time = events[-1][1]  # temps du dernier événement
         
-        # CORRECTION PRINCIPALE: traite tous les événements mais ne compte le temps 
         # que pendant la période d'analyse
         for event_type, event_time, customer_id in events:
             # si l'événement est avant le début de l'analyse, met juste à jour le compteur

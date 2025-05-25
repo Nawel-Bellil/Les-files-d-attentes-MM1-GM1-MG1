@@ -124,7 +124,7 @@ class GM1UniformQueueSimulator:
         last_event_time = analysis_start_time
         analysis_end_time = events[-1][1]  # temps du dernier événement
         
-        # que pendant la période d'analyse
+        # que pendant la période d'analyse (prcq au moment de l analyse on veut savoir combien de clients y a t il dans le system)
         for event_type, event_time, customer_id in events:
             # si l'événement est avant le début de l'analyse, met juste à jour le compteur
             if event_time < analysis_start_time:

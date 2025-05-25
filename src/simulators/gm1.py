@@ -43,7 +43,7 @@ class GM1UniformQueueSimulator:
             # longueur moyenne du système (clients en attente + en service)
             avg_system_length_theo = (rho**2 * (1 + c_a_squared) / (2 * (1 - rho))) + rho
         else:
-            # système instable quand rho >= 1
+            # système instable quand rho >= 1 les tmps deviennet infini
             avg_waiting_time_theo = float('inf')
             avg_response_time_theo = float('inf')
             server_utilization_theo = 1.0

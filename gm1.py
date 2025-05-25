@@ -19,16 +19,6 @@ warnings.filterwarnings('ignore')
 plt.style.use('seaborn-v0_8-darkgrid')
 sns.set_palette("husl")
 
-@dataclass
-class Customer:
-    # structure pour stocker les infos de chaque client
-    id: int
-    arrival_time: float
-    service_start_time: float
-    service_end_time: float
-    waiting_time: float
-    response_time: float
-
 class GM1UniformQueueSimulator:
     
     def __init__(self, mu=1.0, num_customers=1000000, warmup_customers=20000):
@@ -98,6 +88,9 @@ class GM1UniformQueueSimulator:
         for i in range(1, self.num_customers):
             interarrival = self.generate_uniform_interarrival_time(lambda_param)
             arrival_times.append(arrival_times[-1] + interarrival)
+
+
+        service_end_time = 0.0 
         
         # traite chaque client individuellement
         for i in range(self.num_customers):
@@ -126,26 +119,16 @@ class GM1UniformQueueSimulator:
                 total_waiting_time_analysis += waiting_time
                 total_response_time_analysis += response_time
                 customers_served_analysis += 1
-            
-            # stocke les infos du client
-            customer = Customer(
-                id=customer_id,
-                arrival_time=arrival_time,
-                service_start_time=service_start_time,
-                service_end_time=service_end_time,
-                waiting_time=waiting_time,
-                response_time=response_time
-            )
-            customers.append(customer)
-            
+
+            if customer_id == self.warmup_customers:
+                analysis_start_time = arrival_time
+
             # affiche le progrès de temps en temps
             if customer_id % 100000 == 0:
                 print(f"traité {customer_id:,} clients...")
-        
-        # calcule la période d'analyse (après warmup)
-        analysis_start_time = customers[self.warmup_customers].arrival_time
-        analysis_end_time = customers[-1].service_end_time
-        total_analysis_time = analysis_end_time - analysis_start_time
+
+
+        total_analysis_time = service_end_time - analysis_start_time
         
         # calcule les métriques empiriques finales
         avg_waiting_time_emp = total_waiting_time_analysis / customers_served_analysis
@@ -339,6 +322,4 @@ def main():
     print(f"\nsimulation G/M/1 complétée")
 
 if __name__ == "__main__":
-    # fixe la graine pour des résultats reproductibles
-    np.random.seed(42)
     main()

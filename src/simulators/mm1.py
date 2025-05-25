@@ -1,19 +1,7 @@
-"""
-Simulation de File d'Attente M/M/1 avec Loi Exponentielle
-=========================================================
-
-M/M/1 : Arrivées suivent une loi exponentielle, Service suit une loi exponentielle
-Version avec mesure directe de E[L]
-"""
-
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-from scipy import stats
-import time
-from dataclasses import dataclass
-from typing import List, Tuple, Dict
 import warnings
 warnings.filterwarnings('ignore')
 

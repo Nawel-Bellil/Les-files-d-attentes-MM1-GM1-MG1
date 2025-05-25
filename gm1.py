@@ -3,6 +3,7 @@ Simulation de File d'Attente G/M/1 avec Loi Uniforme
 ====================================================
 
 G/M/1 : Arrivées suivent une loi Uniforme, Service suit une loi exponentielle
+Version corrigée avec mesure directe de E[L]
 """
 
 import numpy as np
@@ -68,9 +69,7 @@ class GM1UniformQueueSimulator:
             'avg_system_length_theo': avg_system_length_theo
         }
     
-    def simulate(self, lambda_param):
-        print(f"simulation G/M/1 - λ={lambda_param:.2f}, μ={self.mu:.2f}")
-        
+    def simulate(self, lambda_param):        
         # récupère les valeurs théoriques pour comparaison
         theoretical = self.calculate_theoretical_values(lambda_param)
         
@@ -83,13 +82,20 @@ class GM1UniformQueueSimulator:
         total_response_time_analysis = 0.0
         customers_served_analysis = 0
         
+        # variables pour mesurer E[L] directement
+        total_client_time = 0.0  # somme des (nombre_clients × durée)
+        current_clients_in_system = 0
+        last_event_time = 0.0
+        analysis_started = False
+        
         # génère tous les temps d'arrivée d'un coup pour optimiser
         arrival_times = [0.0]
         for i in range(1, self.num_customers):
             interarrival = self.generate_uniform_interarrival_time(lambda_param)
             arrival_times.append(arrival_times[-1] + interarrival)
 
-
+        # crée une liste d'événements (arrivées et départs) pour mesurer E[L]
+        events = []
         service_end_time = 0.0 
         
         # traite chaque client individuellement
@@ -113,6 +119,10 @@ class GM1UniformQueueSimulator:
             server_busy_until = service_end_time  # met à jour l'occupation du serveur
             response_time = service_end_time - arrival_time  # temps total dans le système
             
+            # ajoute les événements pour mesurer E[L]
+            events.append(('arrival', arrival_time, customer_id))
+            events.append(('departure', service_end_time, customer_id))
+            
             # accumule les stats seulement après le warmup
             if customer_id > self.warmup_customers:
                 total_busy_time_analysis += service_time
@@ -123,11 +133,36 @@ class GM1UniformQueueSimulator:
             if customer_id == self.warmup_customers:
                 analysis_start_time = arrival_time
 
-            # affiche le progrès de temps en temps
-            if customer_id % 100000 == 0:
-                print(f"traité {customer_id:,} clients...")
-
-
+        # trie les événements par temps pour mesurer E[L] correctement
+        events.sort(key=lambda x: x[1])  # trie par temps
+        
+        # mesure E[L] directement en suivant l'évolution du système
+        current_clients_in_system = 0
+        last_event_time = 0.0
+        total_client_time = 0.0
+        analysis_started = False
+        
+        for event_type, event_time, customer_id in events:
+            # commence l'analyse après le warmup
+            if not analysis_started and customer_id > self.warmup_customers:
+                analysis_started = True
+                analysis_start_time = event_time
+                last_event_time = event_time
+                continue
+            
+            # si l'analyse a commencé, accumule le temps
+            if analysis_started:
+                duration = event_time - last_event_time
+                total_client_time += current_clients_in_system * duration
+                last_event_time = event_time
+            
+            # met à jour le nombre de clients dans le système
+            if event_type == 'arrival':
+                current_clients_in_system += 1
+            else:  # departure
+                current_clients_in_system -= 1
+        
+        # finalise la mesure de E[L]
         total_analysis_time = service_end_time - analysis_start_time
         
         # calcule les métriques empiriques finales
@@ -135,8 +170,9 @@ class GM1UniformQueueSimulator:
         avg_response_time_emp = total_response_time_analysis / customers_served_analysis
         server_utilization_emp = total_busy_time_analysis / total_analysis_time
         
-        # utilise la loi de Little pour calculer E[L] empiriquement
-        avg_system_length_emp = lambda_param * avg_response_time_emp
+        # mesure directe de E[L] à partir de l'intégration temporelle
+        avg_system_length_emp = total_client_time / total_analysis_time
+        
         
         return {
             'lambda': lambda_param,
@@ -149,7 +185,7 @@ class GM1UniformQueueSimulator:
             'server_utilization_emp': server_utilization_emp,
             'server_utilization_theo': theoretical['server_utilization_theo'],
             'avg_system_length_theo': theoretical['avg_system_length_theo'],
-            'avg_system_length_emp': avg_system_length_emp,
+            'avg_system_length_emp': avg_system_length_emp,  # mesure directe
             'customers_served': customers_served_analysis,
             'simulation_time': total_analysis_time
         }
@@ -158,13 +194,7 @@ class GM1UniformQueueSimulator:
         # lance plusieurs expériences pour différentes valeurs de lambda
         all_results = []
         
-        print(f"début des expériences G/M/1")
-        print(f"clients total: {self.num_customers:,}, warmup: {self.warmup_customers:,}")
-        
         for lambda_val in lambda_values:
-            print(f"\nexpériences pour λ = {lambda_val:.2f}")
-            
-            start_total = time.time()
             replication_results = []
             
             # fait plusieurs réplications pour chaque lambda si demandé
@@ -197,11 +227,7 @@ class GM1UniformQueueSimulator:
                 all_results.append(mean_result)
             else:
                 # une seule réplication, on ajoute directement
-                all_results.append(replication_results[0])
-            
-            end_total = time.time()
-            print(f"temps total: {end_total - start_total:.2f}s")
-        
+                all_results.append(replication_results[0])    
         return pd.DataFrame(all_results)
 
 def create_performance_plots(results_df):
@@ -251,7 +277,7 @@ def create_performance_plots(results_df):
     # graphique de la longueur du système
     ax = axes[1, 1]
     ax.plot(avg_results['lambda'], avg_results['avg_system_length_emp'], 'bo-', 
-            label='empirique', linewidth=2, markersize=8)
+            label='empirique (mesure directe)', linewidth=2, markersize=8)
     ax.plot(avg_results['lambda'], avg_results['avg_system_length_theo'], 'r--', 
             label='théorique', linewidth=2)
     ax.set_xlabel('taux d\'arrivée λ')
@@ -265,30 +291,19 @@ def create_performance_plots(results_df):
     plt.show()
 
 def main():
-    print("simulation de file d'attente G/M/1")
-    print("arrivées: loi uniforme U(0, 2/λ)")  
-    print("service: loi exponentielle")
-    
     # configuration des paramètres de simulation
     lambda_values = np.arange(0.1, 1.0, 0.1)  # teste différents taux d'arrivée
-    mu = 1.0  # taux de service fixé à 1
-    num_customers = 1000000  # assez de clients pour avoir des stats fiables
-    warmup_customers = 20000  # ignore les premiers clients pour stabiliser
-    num_replications = 3  # répète chaque expérience pour réduire la variance
-    
-    print(f"μ = {mu}, clients: {num_customers:,}, warmup: {warmup_customers:,}")
-    print(f"réplications par λ: {num_replications}")
+    mu = 1.0  
+    num_customers = 1000000  
+    warmup_customers = 20000  
+    num_replications = 3  
     
     # crée le simulateur avec les paramètres choisis
     simulator = GM1UniformQueueSimulator(mu=mu, num_customers=num_customers, 
                                         warmup_customers=warmup_customers)
     
     # lance toutes les simulations
-    start_time = time.time()
     results_df = simulator.run_multiple_experiments(lambda_values, num_replications)
-    end_time = time.time()
-    
-    print(f"\nsimulation terminée en {end_time - start_time:.2f} secondes")
     
     # définit les colonnes à sauvegarder dans le CSV
     csv_columns = [
@@ -304,22 +319,10 @@ def main():
     csv_df = results_df[csv_columns].copy()
     filename = 'gm1.csv'
     csv_df.to_csv(filename, index=False)
-    print(f"résultats sauvegardés dans '{filename}'")
-    print(f"nombre de lignes dans le CSV: {len(csv_df)} (une par valeur de λ)")
-    
-    print(f"\néchantillon des résultats:")
-    print(csv_df.round(4))
-    
-    # vérifie que les lois de Little sont respectées
-    print(f"\nvérification des lois de Little:")
-    for idx, row in csv_df.iterrows():
-        l_little = row['lambda'] * row['avg_response_time_emp']
-        print(f"λ={row['lambda']:.1f}: E[L]={row['avg_system_length_emp']:.4f} vs λ*E[R]={l_little:.4f}")
     
     # génère les graphiques de performance
     create_performance_plots(results_df)
-    
-    print(f"\nsimulation G/M/1 complétée")
 
 if __name__ == "__main__":
+    np.random.seed(42) 
     main()

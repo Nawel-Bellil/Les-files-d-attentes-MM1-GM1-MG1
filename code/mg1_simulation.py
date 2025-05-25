@@ -1,341 +1,326 @@
+"""
+Simulation de File d'Attente M/G/1 avec Service Uniforme
+========================================================
+
+M/G/1 : Arrivées suivent une loi exponentielle, Service suit une loi uniforme
+Version corrigée avec mesure directe de E[L]
+"""
+
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-import time
-from collections import deque
-from scipy import stats
 import seaborn as sns
-from tqdm import tqdm
+from scipy import stats
+import time
+from dataclasses import dataclass
+from typing import List, Tuple, Dict
 import warnings
+warnings.filterwarnings('ignore')
 
+plt.style.use('seaborn-v0_8-darkgrid')
+sns.set_palette("husl")
 
-class QueueSimulator:
-    """
-    Classe abstraite de base pour simuler les systèmes de files d'attente.
-    """
-    def __init__(self, lambda_rate, mu_rate, num_customers=100000, seed=42):
-        """
-        Initialise le simulateur avec des validations améliorées.
-        """
-        # Validation des paramètres
-        if lambda_rate <= 0 or mu_rate <= 0:
-            raise ValueError("Les taux d'arrivée et de service doivent être positifs")
-        
-        if num_customers <= 0:
-            raise ValueError("Le nombre de clients doit être positif")
-            
-        # Vérification de stabilité
-        if lambda_rate >= mu_rate:
-            warnings.warn(f"Système instable: λ={lambda_rate} >= μ={mu_rate}")
-            
-        self.lambda_rate = float(lambda_rate)
-        self.mu_rate = float(mu_rate)
-        self.num_customers = int(num_customers)
-        self.rng = np.random.RandomState(seed)
-        
-        # Initialisation des métriques
-        self._reset_metrics()
-        
-    def _reset_metrics(self):
-        """Réinitialise les métriques de simulation."""
-        self.waiting_times = []  # Utiliser des listes plutôt que des arrays fixes
-        self.response_times = []
-        self.server_busy_time = 0
-        self.last_event_time = 0
-        self.total_simulation_time = 0
-        self.queue = deque()
-        self.server_busy = False
-        
-    def generate_interarrival_time(self):
-        """Génère le temps entre deux arrivées consécutives."""
-        raise NotImplementedError("Les classes dérivées doivent implémenter cette méthode")
+class MG1UniformQueueSimulator:
     
-    def generate_service_time(self):
-        """Génère le temps de service d'un client."""
-        raise NotImplementedError("Les classes dérivées doivent implémenter cette méthode")
-    
-    def run_simulation(self):
-        """
-        Exécute la simulation d'événements discrets avec optimisations.
-        """
-        print(f"Démarrage de la simulation avec {self.num_customers} clients...")
+    def __init__(self, mu=1.0, num_customers=1000000, warmup_customers=20000):
+        # paramètres de base du simulateur
+        self.mu = mu  # taux de service
+        self.num_customers = num_customers  # nombre total de clients à simuler
+        self.warmup_customers = warmup_customers  # clients ignorés pour stabiliser les stats
+        self.results = {}
         
-        try:
-            # Génération vectorisée des temps (plus efficace)
-            print("Génération des temps d'inter-arrivée...")
-            inter_arrival_times = np.array([self.generate_interarrival_time() 
-                                          for _ in range(self.num_customers)])
-            
-            # Validation des temps générés
-            if np.any(inter_arrival_times <= 0):
-                raise ValueError("Temps d'inter-arrivée négatifs ou nuls détectés")
-            
-            print("Génération des temps de service...")
-            service_times = np.array([self.generate_service_time() 
-                                    for _ in range(self.num_customers)])
-            
-            if np.any(service_times <= 0):
-                raise ValueError("Temps de service négatifs ou nuls détectés")
-            
-            # Calcul des temps d'arrivée absolus
-            arrival_times = np.cumsum(inter_arrival_times)
-            
-            # Simulation optimisée
-            departure_time = 0
-            
-            for i in tqdm(range(self.num_customers), desc="Simulation en cours"):
-                arrival_time = arrival_times[i]
-                service_time = service_times[i]
-                
-                # Calcul du temps d'attente
-                if arrival_time >= departure_time:
-                    waiting_time = 0
-                    departure_time = arrival_time + service_time
-                else:
-                    waiting_time = departure_time - arrival_time
-                    departure_time += service_time
-                
-                # Enregistrement des métriques
-                self.waiting_times.append(waiting_time)
-                self.response_times.append(waiting_time + service_time)
-                self.server_busy_time += service_time
-            
-            self.total_simulation_time = departure_time
-            self.calculate_metrics()
-            
-        except Exception as e:
-            print(f"Erreur lors de la simulation: {e}")
-            raise
-            
-    def calculate_metrics(self):
-        """Calcule les métriques finales avec gestion d'erreurs."""
-        try:
-            # Conversion en arrays numpy pour les calculs
-            waiting_times_array = np.array(self.waiting_times)
-            response_times_array = np.array(self.response_times)
-            
-            self.avg_waiting_time = np.mean(waiting_times_array)
-            self.avg_response_time = np.mean(response_times_array)
-            
-            # Validation de la durée de simulation
-            if self.total_simulation_time <= 0:
-                raise ValueError("Durée de simulation invalide")
-                
-            self.utilization = self.server_busy_time / self.total_simulation_time
-            self.theoretical_utilization = self.lambda_rate / self.mu_rate
-            
-            # Métriques additionnelles
-            self.max_waiting_time = np.max(waiting_times_array)
-            self.max_response_time = np.max(response_times_array)
-            self.std_waiting_time = np.std(waiting_times_array)
-            self.std_response_time = np.std(response_times_array)
-            
-            # Percentiles avec gestion d'erreurs
-            if len(waiting_times_array) > 0:
-                self.waiting_time_95th = np.percentile(waiting_times_array, 95)
-                self.response_time_95th = np.percentile(response_times_array, 95)
-            else:
-                self.waiting_time_95th = 0
-                self.response_time_95th = 0
-            
-            if hasattr(self, 'get_theoretical_metrics'):
-                self.theoretical_metrics = self.get_theoretical_metrics()
-                
-        except Exception as e:
-            print(f"Erreur lors du calcul des métriques: {e}")
-            raise
+    def generate_exponential_interarrival_time(self, lambda_param):
+        # génère les temps entre arrivées selon une loi exponentielle
+        return np.random.exponential(1.0 / lambda_param)
     
-    def get_results(self):
-        """Renvoie les résultats avec validation."""
+    def generate_uniform_service_time(self):
+        # temps de service selon une loi uniforme U(0, 2/μ) pour avoir E[S] = 1/μ
+        return np.random.uniform(0, 2.0 / self.mu)
+    
+    def calculate_theoretical_values(self, lambda_param):
+        # calcule les valeurs théoriques selon les formules M/G/1
+        rho = lambda_param / self.mu  # taux d'utilisation
+        
+        # coefficient de variation au carré pour la distribution uniforme des services
+        c_s_squared = 1.0/3.0  # propriété mathématique de la loi uniforme
+        
+        if rho < 1.0:
+            # formule de Pollaczek-Khintchine pour M/G/1
+            avg_waiting_time_theo = (rho**2 * (1 + c_s_squared) / (2 * (1 - rho))) * (1.0 / self.mu)
+            avg_response_time_theo = avg_waiting_time_theo + (1.0 / self.mu)
+            server_utilization_theo = rho
+            
+            # longueur moyenne du système (Little's law: L = λ * T)
+            avg_system_length_theo = lambda_param * avg_response_time_theo
+        else:
+            # système instable quand rho >= 1
+            avg_waiting_time_theo = float('inf')
+            avg_response_time_theo = float('inf')
+            server_utilization_theo = 1.0
+            avg_system_length_theo = float('inf')
+        
         return {
-            'lambda': self.lambda_rate,
-            'mu': self.mu_rate,
-            'rho': getattr(self, 'utilization', 0),
-            'theoretical_rho': self.theoretical_utilization,
-            'avg_waiting_time': getattr(self, 'avg_waiting_time', 0),
-            'avg_response_time': getattr(self, 'avg_response_time', 0),
-            'max_waiting_time': getattr(self, 'max_waiting_time', 0),
-            'max_response_time': getattr(self, 'max_response_time', 0),
-            'std_waiting_time': getattr(self, 'std_waiting_time', 0),
-            'std_response_time': getattr(self, 'std_response_time', 0),
-            'waiting_time_95th': getattr(self, 'waiting_time_95th', 0),
-            'response_time_95th': getattr(self, 'response_time_95th', 0),
-            'num_customers': self.num_customers,
-            'simulation_time': getattr(self, 'total_simulation_time', 0)
+            'rho': rho,
+            'avg_waiting_time_theo': avg_waiting_time_theo,
+            'avg_response_time_theo': avg_response_time_theo,
+            'server_utilization_theo': server_utilization_theo,
+            'avg_system_length_theo': avg_system_length_theo
         }
     
-    def print_summary(self):
-        """Affiche un résumé avec gestion d'erreurs."""
-        try:
-            print(f"\n{'='*50}")
-            print(f"RÉSULTATS DE SIMULATION - {self.__class__.__name__}")
-            print(f"{'='*50}")
-            print(f"Paramètres:")
-            print(f"  λ (taux d'arrivée): {self.lambda_rate}")
-            print(f"  μ (taux de service): {self.mu_rate}")
-            print(f"  Nombre de clients: {self.num_customers}")
-            print(f"\nMétriques principales:")
-            print(f"  Taux d'occupation (ρ): {getattr(self, 'utilization', 'N/A'):.4f}")
-            print(f"  Temps d'attente moyen: {getattr(self, 'avg_waiting_time', 'N/A'):.4f}")
-            print(f"  Temps de réponse moyen: {getattr(self, 'avg_response_time', 'N/A'):.4f}")
-            print(f"\nMétriques de variabilité:")
-            print(f"  Écart-type temps d'attente: {getattr(self, 'std_waiting_time', 'N/A'):.4f}")
-            print(f"  Écart-type temps de réponse: {getattr(self, 'std_response_time', 'N/A'):.4f}")
-            print(f"  95e percentile temps d'attente: {getattr(self, 'waiting_time_95th', 'N/A'):.4f}")
-            print(f"  95e percentile temps de réponse: {getattr(self, 'response_time_95th', 'N/A'):.4f}")
-        except Exception as e:
-            print(f"Erreur lors de l'affichage: {e}")
-
-
-class MG1Simulator(QueueSimulator):
-    """
-    Simulateur M/G/1 amélioré avec validations et optimisations.
-    """
-    def __init__(self, lambda_rate, mu_rate, shape=2.0, num_customers=100000, seed=42):
-        super().__init__(lambda_rate, mu_rate, num_customers, seed)
+    def simulate(self, lambda_param):        
+        # récupère les valeurs théoriques pour comparaison
+        theoretical = self.calculate_theoretical_values(lambda_param)
         
-        if shape <= 0:
-            raise ValueError("Le paramètre de forme doit être positif")
-            
-        self.shape = float(shape)
-        self.scale = 1.0 / (mu_rate * shape)
+        customers = []
+        server_busy_until = 0.0  # instant où le serveur sera libre
         
-        if self.scale <= 0:
-            raise ValueError("Paramètre d'échelle invalide")
+        # variables pour les statistiques après la période de warmup
+        total_busy_time_analysis = 0.0
+        total_waiting_time_analysis = 0.0
+        total_response_time_analysis = 0.0
+        customers_served_analysis = 0
         
-    def generate_interarrival_time(self):
-        """Génère un temps inter-arrivée avec validation."""
-        time_val = self.rng.exponential(scale=1/self.lambda_rate)
-        if time_val <= 0:
-            return 1e-10  # Valeur minimale pour éviter les problèmes
-        return time_val
-    
-    def generate_service_time(self):
-        """Génère un temps de service avec validation."""
-        time_val = self.rng.gamma(shape=self.shape, scale=self.scale)
-        if time_val <= 0:
-            return 1e-10  # Valeur minimale pour éviter les problèmes
-        return time_val
-    
-    def get_theoretical_metrics(self):
-        """Calcule les métriques théoriques avec gestion d'erreurs."""
-        try:
-            rho = self.lambda_rate / self.mu_rate
-            
-            if rho >= 1:
-                return {
-                    'rho': rho,
-                    'avg_waiting_time': float('inf'),
-                    'avg_response_time': float('inf'),
-                    'avg_queue_length': float('inf')
-                }
-            
-            # Variance du temps de service (pour la distribution gamma)
-            var_service = self.shape * self.scale**2
-            
-            # Formule de Pollaczek-Khinchine
-            numerator = self.lambda_rate * ((1/self.mu_rate)**2 + var_service)
-            denominator = 2 * (1 - rho)
-            
-            if denominator <= 0:
-                raise ValueError("Dénominateur invalide dans la formule de Pollaczek-Khinchine")
-                
-            avg_waiting_time = numerator / denominator
-            avg_response_time = avg_waiting_time + 1/self.mu_rate
-            avg_queue_length = self.lambda_rate * avg_waiting_time
-            
-            return {
-                'rho': rho,
-                'avg_waiting_time': avg_waiting_time,
-                'avg_response_time': avg_response_time,
-                'avg_queue_length': avg_queue_length
-            }
-            
-        except Exception as e:
-            print(f"Erreur dans le calcul des métriques théoriques: {e}")
-            return {
-                'rho': self.lambda_rate / self.mu_rate,
-                'avg_waiting_time': float('nan'),
-                'avg_response_time': float('nan'),
-                'avg_queue_length': float('nan')
-            }
+        # variables pour mesurer E[L] directement
+        total_client_time = 0.0  # somme des (nombre_clients × durée)
+        current_clients_in_system = 0
+        last_event_time = 0.0
+        analysis_started = False
+        
+        # génère tous les temps d'arrivée d'un coup pour optimiser
+        arrival_times = [0.0]
+        for i in range(1, self.num_customers):
+            interarrival = self.generate_exponential_interarrival_time(lambda_param)
+            arrival_times.append(arrival_times[-1] + interarrival)
 
-
-def run_mg1_experiment(lambda_values, mu=1.0, shape=2.0, num_customers=50000, num_runs=3):
-    """
-    Exécute des expériences M/G/1 avec gestion d'erreurs améliorée.
-    """
-    results = []
-    
-    print(f"\nExécution d'expériences M/G/1")
-    print(f"Lambda de {min(lambda_values)} à {max(lambda_values)}, μ = {mu}, shape = {shape}")
-    
-    for lambda_val in tqdm(lambda_values, desc="Simulation M/G/1"):
-        if lambda_val >= mu:
-            print(f"Attention: λ={lambda_val} >= μ={mu}, résultats peuvent être instables")
-            continue  # Skip unstable configurations
-            
-        run_results = []
+        # crée une liste d'événements (arrivées et départs) pour mesurer E[L]
+        events = []
+        service_end_time = 0.0 
         
-        for run in range(num_runs):
-            try:
-                simulator = MG1Simulator(
-                    lambda_val, mu, 
-                    shape=shape,
-                    num_customers=num_customers, 
-                    seed=42+run
-                )
-                simulator.run_simulation()
-                run_results.append(simulator.get_results())
-                
-            except Exception as e:
-                print(f"Erreur lors de l'exécution {run} pour λ={lambda_val}: {e}")
+        # traite chaque client individuellement
+        for i in range(self.num_customers):
+            customer_id = i + 1
+            arrival_time = arrival_times[i]
+            
+            # détermine quand le service commence
+            if arrival_time >= server_busy_until:
+                # serveur libre, pas d'attente
+                service_start_time = arrival_time
+                waiting_time = 0.0
+            else:
+                # serveur occupé, il faut attendre
+                service_start_time = server_busy_until
+                waiting_time = service_start_time - arrival_time
+            
+            # génère le temps de service et calcule la fin
+            service_time = self.generate_uniform_service_time()
+            service_end_time = service_start_time + service_time
+            server_busy_until = service_end_time  # met à jour l'occupation du serveur
+            response_time = service_end_time - arrival_time  # temps total dans le système
+            
+            # ajoute les événements pour mesurer E[L]
+            events.append(('arrival', arrival_time, customer_id))
+            events.append(('departure', service_end_time, customer_id))
+            
+            # accumule les stats seulement après le warmup
+            if customer_id > self.warmup_customers:
+                total_busy_time_analysis += service_time
+                total_waiting_time_analysis += waiting_time
+                total_response_time_analysis += response_time
+                customers_served_analysis += 1
+
+            if customer_id == self.warmup_customers:
+                analysis_start_time = arrival_time
+
+        # trie les événements par temps pour mesurer E[L] correctement
+        events.sort(key=lambda x: x[1])  # trie par temps
+        
+        # mesure E[L] directement en suivant l'évolution du système
+        current_clients_in_system = 0
+        last_event_time = 0.0
+        total_client_time = 0.0
+        analysis_started = False
+        
+        for event_type, event_time, customer_id in events:
+            # commence l'analyse après le warmup
+            if not analysis_started and customer_id > self.warmup_customers:
+                analysis_started = True
+                analysis_start_time = event_time
+                last_event_time = event_time
                 continue
-                
-        if not run_results:
-            print(f"Aucun résultat valide pour λ={lambda_val}")
-            continue
             
-        # Calculer la moyenne des résultats valides
-        avg_result = {
-            'lambda': lambda_val,
-            'mu': mu,
-            'shape': shape,
-            'rho': np.mean([r['rho'] for r in run_results]),
-            'theoretical_rho': lambda_val / mu,
-            'avg_waiting_time': np.mean([r['avg_waiting_time'] for r in run_results]),
-            'avg_response_time': np.mean([r['avg_response_time'] for r in run_results]),
-            'std_waiting_time': np.std([r['avg_waiting_time'] for r in run_results]),
-            'std_response_time': np.std([r['avg_response_time'] for r in run_results]),
-            'max_waiting_time': np.mean([r['max_waiting_time'] for r in run_results]),
-            'max_response_time': np.mean([r['max_response_time'] for r in run_results]),
-            'waiting_time_95th': np.mean([r['waiting_time_95th'] for r in run_results]),
-            'response_time_95th': np.mean([r['response_time_95th'] for r in run_results])
-        }
+            # si l'analyse a commencé, accumule le temps
+            if analysis_started:
+                duration = event_time - last_event_time
+                total_client_time += current_clients_in_system * duration
+                last_event_time = event_time
+            
+            # met à jour le nombre de clients dans le système
+            if event_type == 'arrival':
+                current_clients_in_system += 1
+            else:  # departure
+                current_clients_in_system -= 1
         
-        results.append(avg_result)
+        # finalise la mesure de E[L]
+        total_analysis_time = service_end_time - analysis_start_time
+        
+        # calcule les métriques empiriques finales
+        avg_waiting_time_emp = total_waiting_time_analysis / customers_served_analysis
+        avg_response_time_emp = total_response_time_analysis / customers_served_analysis
+        server_utilization_emp = total_busy_time_analysis / total_analysis_time
+        
+        # mesure directe de E[L] à partir de l'intégration temporelle
+        avg_system_length_emp = total_client_time / total_analysis_time
+        
+        
+        return {
+            'lambda': lambda_param,
+            'mu': self.mu,
+            'rho': server_utilization_emp,
+            'avg_response_time_emp': avg_response_time_emp,
+            'avg_response_time_theo': theoretical['avg_response_time_theo'],
+            'avg_waiting_time_emp': avg_waiting_time_emp,
+            'avg_waiting_time_theo': theoretical['avg_waiting_time_theo'],
+            'server_utilization_emp': server_utilization_emp,
+            'server_utilization_theo': theoretical['server_utilization_theo'],
+            'avg_system_length_theo': theoretical['avg_system_length_theo'],
+            'avg_system_length_emp': avg_system_length_emp,  # mesure directe
+            'customers_served': customers_served_analysis,
+            'simulation_time': total_analysis_time
+        }
     
-    return pd.DataFrame(results)
+    def run_multiple_experiments(self, lambda_values, num_replications=1):
+        # lance plusieurs expériences pour différentes valeurs de lambda
+        all_results = []
+        
+        for lambda_val in lambda_values:
+            replication_results = []
+            
+            # fait plusieurs réplications pour chaque lambda si demandé
+            for rep in range(num_replications):
+                result = self.simulate(lambda_val)
+                result['replication'] = rep + 1
+                replication_results.append(result)
+            
+            # calcule la moyenne des réplications pour ce lambda
+            if num_replications > 1:
+                # convertit en DataFrame pour faciliter les calculs
+                rep_df = pd.DataFrame(replication_results)
+                
+                # moyenne des métriques empiriques
+                mean_result = {
+                    'lambda': lambda_val,
+                    'mu': self.mu,
+                    'rho': rep_df['rho'].mean(),
+                    'avg_response_time_emp': rep_df['avg_response_time_emp'].mean(),
+                    'avg_response_time_theo': rep_df['avg_response_time_theo'].iloc[0],  # les valeurs théoriques sont identiques
+                    'avg_waiting_time_emp': rep_df['avg_waiting_time_emp'].mean(),
+                    'avg_waiting_time_theo': rep_df['avg_waiting_time_theo'].iloc[0],
+                    'server_utilization_emp': rep_df['server_utilization_emp'].mean(),
+                    'server_utilization_theo': rep_df['server_utilization_theo'].iloc[0],
+                    'avg_system_length_theo': rep_df['avg_system_length_theo'].iloc[0],
+                    'avg_system_length_emp': rep_df['avg_system_length_emp'].mean(),
+                    'customers_served': rep_df['customers_served'].mean(),
+                    'simulation_time': rep_df['simulation_time'].mean()
+                }
+                all_results.append(mean_result)
+            else:
+                # une seule réplication, on ajoute directement
+                all_results.append(replication_results[0])    
+        return pd.DataFrame(all_results)
 
+def create_performance_plots(results_df):
+    # crée les graphiques de performance
+    avg_results = results_df.copy()
+    
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    fig.suptitle('analyse de performance - file M/G/1 (services uniformes)', 
+                 fontsize=16, fontweight='bold')
+    
+    # graphique des temps de réponse
+    ax = axes[0, 0]
+    ax.plot(avg_results['lambda'], avg_results['avg_response_time_emp'], 'bo-', 
+            label='empirique', linewidth=2, markersize=8)
+    ax.plot(avg_results['lambda'], avg_results['avg_response_time_theo'], 'r--', 
+            label='théorique', linewidth=2)
+    ax.set_xlabel('taux d\'arrivée λ')
+    ax.set_ylabel('temps de réponse E[R]')
+    ax.set_title('temps de réponse moyen')
+    ax.legend()
+    ax.grid(True, alpha=0.4)
+    
+    # graphique des temps d'attente
+    ax = axes[1, 0]
+    ax.plot(avg_results['lambda'], avg_results['avg_waiting_time_emp'], 'bo-', 
+            label='empirique', linewidth=2, markersize=8)
+    ax.plot(avg_results['lambda'], avg_results['avg_waiting_time_theo'], 'r--', 
+            label='théorique', linewidth=2)
+    ax.set_xlabel('taux d\'arrivée λ')
+    ax.set_ylabel('temps d\'attente E[W]')
+    ax.set_title('temps d\'attente moyen')
+    ax.legend()
+    ax.grid(True, alpha=0.4)
+    
+    # graphique de l'utilisation du serveur
+    ax = axes[0, 1]
+    ax.plot(avg_results['lambda'], avg_results['server_utilization_emp'], 'bo-', 
+            label='empirique', linewidth=2, markersize=8)
+    ax.plot(avg_results['lambda'], avg_results['server_utilization_theo'], 'r--', 
+            label='théorique', linewidth=2)
+    ax.set_xlabel('taux d\'arrivée λ')
+    ax.set_ylabel('utilisation ρ')
+    ax.set_title('utilisation du serveur')
+    ax.legend()
+    ax.grid(True, alpha=0.4)
+    
+    # graphique de la longueur du système
+    ax = axes[1, 1]
+    ax.plot(avg_results['lambda'], avg_results['avg_system_length_emp'], 'bo-', 
+            label='empirique (mesure directe)', linewidth=2, markersize=8)
+    ax.plot(avg_results['lambda'], avg_results['avg_system_length_theo'], 'r--', 
+            label='théorique', linewidth=2)
+    ax.set_xlabel('taux d\'arrivée λ')
+    ax.set_ylabel('longueur du système E[L]')
+    ax.set_title('longueur du système moyenne')
+    ax.legend()
+    ax.grid(True, alpha=0.4)
+    
+    plt.tight_layout()
+    plt.savefig('mg1.png', dpi=300, bbox_inches='tight')
+    plt.show()
 
-# Fonction main simplifiée pour test
 def main():
-    """Fonction principale avec paramètres réduits pour éviter les problèmes de mémoire."""
-    print("Test M/G/1 avec paramètres réduits...")
+    # configuration des paramètres de simulation
+    lambda_values = np.arange(0.1, 1.0, 0.1)  # teste différents taux d'arrivée
+    mu = 1.0  
+    num_customers = 1000000  
+    warmup_customers = 20000  
+    num_replications = 3  
     
-    # Paramètres réduits pour éviter les problèmes de mémoire
-    lambda_values = np.arange(0.1, 0.9, 0.2)  # Moins de valeurs
-    mu = 1.0
-    num_customers = 10000  # Nombre réduit de clients
-    num_runs = 2  # Moins d'exécutions
+    # crée le simulateur avec les paramètres choisis
+    simulator = MG1UniformQueueSimulator(mu=mu, num_customers=num_customers, 
+                                        warmup_customers=warmup_customers)
     
-    # Test simple
-    mg1 = MG1Simulator(0.7, 1.0, shape=2.0, num_customers=5000, seed=42)
-    mg1.run_simulation()
-    mg1.print_summary()
+    # lance toutes les simulations
+    results_df = simulator.run_multiple_experiments(lambda_values, num_replications)
     
-    print("Test terminé avec succès!")
-
+    # définit les colonnes à sauvegarder dans le CSV
+    csv_columns = [
+        'lambda', 'mu', 'rho', 
+        'avg_response_time_emp', 'avg_response_time_theo',
+        'avg_waiting_time_emp', 'avg_waiting_time_theo',
+        'server_utilization_emp', 'server_utilization_theo',
+        'avg_system_length_theo', 'avg_system_length_emp',
+        'customers_served', 'simulation_time'
+    ]
+    
+    # sauvegarde les résultats dans un fichier CSV
+    csv_df = results_df[csv_columns].copy()
+    filename = 'mg1.csv'
+    csv_df.to_csv(filename, index=False)
+    
+    # génère les graphiques de performance
+    create_performance_plots(results_df)
 
 if __name__ == "__main__":
+    np.random.seed(42) 
     main()

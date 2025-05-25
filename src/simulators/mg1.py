@@ -1,19 +1,7 @@
-"""
-Simulation de File d'Attente M/G/1 avec Service Uniforme
-========================================================
-
-M/G/1 : Arrivées suivent une loi exponentielle, Service suit une loi uniforme
-Version corrigée avec mesure directe de E[L]
-"""
-
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-from scipy import stats
-import time
-from dataclasses import dataclass
-from typing import List, Tuple, Dict
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -51,13 +39,13 @@ class MG1UniformQueueSimulator:
         # Mean service time
         mean_service_time = 1 / self.mu
 
-        # Coefficient of variation Cs^2 = 1/3
+        # coefficient de variation Cs^2 = 1/3
         C_s_squared = 1 / 3
 
         # Second moment of service time: E[S^2] = (1/μ)^2 * (1 + Cs^2)
         service_time_second_moment = (mean_service_time ** 2) * (1 + C_s_squared)
 
-        # Average waiting time using Pollaczek–Khinchine formula
+        # average waiting time using Pollaczek–Khinchine formula
         avg_waiting_time_theo = (lambda_param * service_time_second_moment) / (2 * (1 - rho))
 
         # Average response time
@@ -351,5 +339,4 @@ def main():
     create_performance_plots(results_df)
 
 if __name__ == "__main__":
-    np.random.seed(42) 
     main()

@@ -201,17 +201,11 @@ def main():
         fig1.savefig('empirical_performance_metrics_comparison.png', dpi=300, bbox_inches='tight')
         fig2.savefig('theoretical_performance_metrics_comparison.png', dpi=300, bbox_inches='tight')
         
-        print(f"\n✅ analysis complete!")
-        print(f"📊 figures saved:")
-        print(f"   - empirical_performance_metrics_comparison.png")
-        print(f"   - theoretical_performance_metrics_comparison.png") 
-        
-        # show plots
+        print(f"\n analysis complete!")
         plt.show()
         
     except Exception as e:
-        print(f"❌ error: {e}")
-        print("make sure your csv files (mm1.csv, mg1.csv, gm1.csv) are in the same directory as this script.")
+        print(f" error: {e}")
 
 if __name__ == "__main__":
     main()

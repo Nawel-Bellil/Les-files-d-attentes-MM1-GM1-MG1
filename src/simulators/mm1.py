@@ -319,5 +319,4 @@ def main():
     create_performance_plots(results_df)
 
 if __name__ == "__main__":
-    np.random.seed(42) 
     main()

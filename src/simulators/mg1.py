@@ -139,6 +139,29 @@ class MG1UniformQueueSimulator:
         last_event_time = 0.0
         total_client_time = 0.0
         analysis_started = False
+        analysis_start_time = 0.0
+        
+        # premier passage: compter les clients présents au début de l'analyse
+        clients_at_analysis_start = 0
+        for event_type, event_time, customer_id in events:
+            if customer_id <= self.warmup_customers:
+                # traite tous les événements de warmup pour avoir le bon état initial
+                if event_type == 'arrival':
+                    current_clients_in_system += 1
+                else:  # departure
+                    current_clients_in_system -= 1
+            else:
+                # premier événement après warmup = début de l'analyse
+                if not analysis_started:
+                    analysis_started = True
+                    analysis_start_time = event_time
+                    last_event_time = event_time
+                    clients_at_analysis_start = current_clients_in_system
+                break
+        
+        # deuxième passage: mesure de E[L] avec le bon état initial
+        current_clients_in_system = clients_at_analysis_start
+        analysis_started = False
         
         for event_type, event_time, customer_id in events:
             # commence l'analyse après le warmup
@@ -146,19 +169,18 @@ class MG1UniformQueueSimulator:
                 analysis_started = True
                 analysis_start_time = event_time
                 last_event_time = event_time
-                continue
             
             # si l'analyse a commencé, accumule le temps
             if analysis_started:
                 duration = event_time - last_event_time
                 total_client_time += current_clients_in_system * duration
                 last_event_time = event_time
-            
-            # met à jour le nombre de clients dans le système
-            if event_type == 'arrival':
-                current_clients_in_system += 1
-            else:  # departure
-                current_clients_in_system -= 1
+                
+                # met à jour le nombre de clients dans le système
+                if event_type == 'arrival':
+                    current_clients_in_system += 1
+                else:  # departure
+                    current_clients_in_system -= 1
         
         # finalise la mesure de E[L]
         total_analysis_time = service_end_time - analysis_start_time

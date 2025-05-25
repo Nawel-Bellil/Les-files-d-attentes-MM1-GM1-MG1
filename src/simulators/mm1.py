@@ -153,7 +153,6 @@ class MM1QueueSimulator:
         avg_response_time_emp = total_response_time_analysis / customers_served_analysis
         server_utilization_emp = total_busy_time_analysis / total_analysis_time
         
-        # mesure directe de E[L] à partir de l'intégration temporelle
         avg_system_length_emp = total_client_time / total_analysis_time
         
         

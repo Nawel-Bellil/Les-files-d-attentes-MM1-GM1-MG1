@@ -296,9 +296,6 @@ def main():
     # lance toutes les simulations
     results_df = simulator.run_multiple_experiments(lambda_values, num_replications)
     
-    for _, row in results_df.iterrows():
-        error_pct = abs(row['avg_system_length_emp'] - row['avg_system_length_theo']) / row['avg_system_length_theo'] * 100
-
     # définit les colonnes à sauvegarder dans le CSV
     csv_columns = [
         'lambda', 'mu', 'rho', 

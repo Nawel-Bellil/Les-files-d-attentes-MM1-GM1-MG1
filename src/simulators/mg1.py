@@ -38,34 +38,41 @@ class MG1UniformQueueSimulator:
         return np.random.uniform(0, 2.0 / self.mu)
     
     def calculate_theoretical_values(self, lambda_param):
-        # calcule les valeurs théoriques selon les formules M/G/1
-        rho = lambda_param / self.mu  # taux d'utilisation
-        
-        # coefficient de variation au carré pour la distribution uniforme des services
-        c_s_squared = 1.0/3.0  # propriété mathématique de la loi uniforme
-        
-        if rho < 1.0:
-            # formule de Pollaczek-Khintchine pour M/G/1
-            avg_waiting_time_theo = (rho**2 * (1 + c_s_squared) / (2 * (1 - rho))) * (1.0 / self.mu)
-            avg_response_time_theo = avg_waiting_time_theo + (1.0 / self.mu)
-            server_utilization_theo = rho
-            
-            # longueur moyenne du système (Little's law: L = λ * T)
-            avg_system_length_theo = lambda_param * avg_response_time_theo
-        else:
-            # système instable quand rho >= 1
-            avg_waiting_time_theo = float('inf')
-            avg_response_time_theo = float('inf')
-            server_utilization_theo = 1.0
-            avg_system_length_theo = float('inf')
-        
-        return {
-            'rho': rho,
-            'avg_waiting_time_theo': avg_waiting_time_theo,
-            'avg_response_time_theo': avg_response_time_theo,
-            'server_utilization_theo': server_utilization_theo,
-            'avg_system_length_theo': avg_system_length_theo
-        }
+    # Utilization
+      rho = lambda_param / self.mu
+      server_utilization_theo = rho
+
+      if rho >= 1:
+         avg_waiting_time_theo = float('inf')
+         avg_response_time_theo = float('inf')
+         avg_system_length_theo = float('inf')
+      else:
+        # Service time follows Uniform(0, 2/μ)
+        # Mean service time
+        mean_service_time = 1 / self.mu
+
+        # Coefficient of variation Cs^2 = 1/3
+        C_s_squared = 1 / 3
+
+        # Second moment of service time: E[S^2] = (1/μ)^2 * (1 + Cs^2)
+        service_time_second_moment = (mean_service_time ** 2) * (1 + C_s_squared)
+
+        # Average waiting time using Pollaczek–Khinchine formula
+        avg_waiting_time_theo = (lambda_param * service_time_second_moment) / (2 * (1 - rho))
+
+        # Average response time
+        avg_response_time_theo = avg_waiting_time_theo + mean_service_time
+
+        # Little’s Law: L = λ * R
+        avg_system_length_theo = lambda_param * avg_response_time_theo
+
+      return {
+        'rho': rho,
+        'avg_waiting_time_theo': avg_waiting_time_theo,
+        'avg_response_time_theo': avg_response_time_theo,
+        'server_utilization_theo': server_utilization_theo,
+        'avg_system_length_theo': avg_system_length_theo
+    }
     
     def simulate(self, lambda_param):        
         # récupère les valeurs théoriques pour comparaison

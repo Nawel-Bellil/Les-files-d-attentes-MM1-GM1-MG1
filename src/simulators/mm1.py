@@ -22,7 +22,7 @@ class MM1Simulator:
         self.reset_stats()
     
     def reset_stats(self):
-        """Réinitialise les statistiques"""
+        """Réinitialise les statistiques apres chaque simulation pour que donn ne sinterferent pas"""
         self.customers_served = 0
         self.total_response_time = 0
         self.total_waiting_time = 0
